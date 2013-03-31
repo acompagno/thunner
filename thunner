@@ -183,7 +183,7 @@ def drawlist(scr,list_height,width,offset,songs,item,code,colors,colormap):
             s = s.encode(code)
             try:
                 if i == item:
-                    drawline(scr,offset+i-cl,width,slen,(s,colors[colormap['current-item']]))
+                    drawline(scr,offset+i-cl,width,slen+2,("* " + s,colors[colormap['current-item']]))
                 else:
                     drawline(scr,offset+i-cl,width,slen,(s,colors[colormap['text']]))
             except curses.error:
