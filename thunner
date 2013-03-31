@@ -409,6 +409,18 @@ def main():
                 if c_item > 0:
                     c_item -= 1
                 c_menu["subtreeline"] = c_item
+            elif c == curses.KEY_NPAGE:
+                if c_item < c_n-10:
+                    c_item += 10
+                else:
+                    c_item = c_n
+                c_menu["subtreeline"] = c_item
+            elif c == curses.KEY_PPAGE:
+                if c_item > 10:
+                    c_item -= 10
+                else:
+                    c_item = 0
+                c_menu["subtreeline"] = c_item
             elif c == ord(' '):
                 if status == 'Playing:':
                     status = 'Paused:'
