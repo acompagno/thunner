@@ -216,8 +216,8 @@ def gen_trees(library):
     # Using defaultdict we can group song dicts by artist:
     artists_dict = collections.defaultdict(list)
     for i in library:
-        # Add artist of i as key if it doesn't exist and add song as key list item
-        artists_dict[i['artist']].append(i)
+        # Add albumArtist of i as key if it doesn't exist and add song as key list item
+        artists_dict[i['albumArtist']].append(i)
     # Initialise lists for artists and albums to return
     artists = []
     albums = []
