@@ -176,7 +176,7 @@ def drawlist(scr,list_height,width,offset,songs,item,code,colors,colormap):
         if i < n_songs:
             song = songs[i]
             if "id" in song:
-                s = str(song['track']) + '. ' + song['name']
+                s = (str(song['track']) if 'track' in song else 'x') + '. ' + song['name']
             else:
                 s = song["name"]
             slen = len(s)
@@ -232,8 +232,12 @@ def gen_trees(library):
             album_name = album
             if album == "":
                 album_name = "Untitled Album"
-            albums_of_artist.append({ "name":album_name, 
-                                      "subtree":sorted(tracks,key=itemgetter('track')), 
+
+            if(len(tracks) > 0 and 'track' in tracks[0]):
+                tracks = sorted(tracks,key=itemgetter('track'))
+
+            albums_of_artist.append({ "name":album_name,
+                                      "subtree":tracks,
                                       "subtreeline":0 })
         albums = albums + albums_of_artist
         artists.append({ "name":artist, 
