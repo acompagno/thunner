@@ -407,10 +407,14 @@ def main():
             elif c == curses.KEY_DOWN: 
                 if c_item < c_n-1:
                     c_item += 1
+                else:
+                    c_item = 0
                 c_menu["subtreeline"] = c_item
             elif c == curses.KEY_UP:
                 if c_item > 0:
                     c_item -= 1
+                else:
+                    c_item = c_n-1
                 c_menu["subtreeline"] = c_item
             elif c == curses.KEY_NPAGE:
                 if c_item < c_n-10:
