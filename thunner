@@ -36,7 +36,7 @@ import signal
 
 from Queue import Queue, Empty
 from threading import Thread
-from gmusicapi.api import Api
+from gmusicapi import Webclient
 from getpass import getpass
 from operator import itemgetter
 
@@ -105,7 +105,7 @@ def name_colors(colordefs):
     return colormap
 
 def apiinit(email,password):
-    api = Api()
+    api = Webclient()
     
     logged_in = False
     attempts = 0
@@ -139,9 +139,7 @@ def drawline(scr,y,width,slen,cs):
     s = cs[0]
     col = cs[1]
     scr.addnstr(y,0,s,width,curses.color_pair(col))
-    for i in range(slen,width):
-        scr.addstr(y,slen,' ',curses.color_pair(col))
-        slen += 1
+    scr.addstr(y,slen," " * (width - slen),curses.color_pair(col))
     
 def header(scr,width,parents,current,code,colors,colormap):
     locstring = [('thunner','thunner')]
@@ -314,7 +312,7 @@ def main():
         
         previous = []
         
-        timeout = 17 # getch timeout in ms
+        timeout = 150 # getch timeout in ms
 
         header_height = 2
         footer_height = 2
@@ -335,6 +333,7 @@ def main():
         scr.refresh()
         while True:
             c = scr.getch()
+            redraw = True
             if c == -1:
                 # We've had no input
                 # Let's check if a song has stopped playing and we need to play the next in the queue
@@ -344,6 +343,8 @@ def main():
                     song = queue[q_n]
                     playing = play(api.get_stream_url(song['id']))
                     current_song = song
+                else:
+                    redraw = False #Nothing is going on, why redraw?
             elif c == ord('q'): 
                 if isinstance(playing, subprocess.Popen):
                     playing.terminate()
@@ -422,18 +423,19 @@ def main():
                 height, width = scr.getmaxyx()
                 viewheight = height-header_height-footer_height
             # Redraw the screen
-            scr.erase()
-            header(scr,width,previous,c_menu,code,colors,colormap)
-            if current_song == None:
-                footer(scr,height,width,[(status,'status')],code,colors,colormap)
-            else:
-                footer(scr,height,width,[(status,'status'),
-                                         (' ','text'),
-                                         (current_song['artist'],'current-artist'),
-                                         (' - ','footer-sep'),
-                                         (current_song['name'],'current-song')],code,colors,colormap)
-            drawlist(scr,viewheight,width,header_height,c_list,c_item,code,colors,colormap)
-            scr.refresh()
+            if redraw:
+                scr.erase()
+                header(scr,width,previous,c_menu,code,colors,colormap)
+                if current_song == None:
+                    footer(scr,height,width,[(status,'status')],code,colors,colormap)
+                else:
+                    footer(scr,height,width,[(status,'status'),
+                                             (' ','text'),
+                                             (current_song['artist'],'current-artist'),
+                                             (' - ','footer-sep'),
+                                             (current_song['name'],'current-song')],code,colors,colormap)
+                drawlist(scr,viewheight,width,header_height,c_list,c_item,code,colors,colormap)
+                scr.refresh()
     finally:
         if isinstance(playing, subprocess.Popen):
             playing.terminate()
