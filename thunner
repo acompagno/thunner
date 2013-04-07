@@ -233,7 +233,7 @@ def gen_trees(library):
             albums_of_artist.append({ "name":album_name, 
                                       "subtree":sorted(tracks,key=itemgetter('track')), 
                                       "subtreeline":0 })
-        albums = albums + albums_of_artist
+        albums.extend(albums_of_artist)
         artists.append({ "name":artist, 
                          "subtree":sorted(albums_of_artist,key=lambda x: x['name'].lower()), 
                          "subtreeline":0 })
