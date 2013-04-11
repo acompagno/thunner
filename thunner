@@ -109,7 +109,7 @@ def apiinit(email,password):
     
     logged_in = False
     attempts = 0
-    api.login(email, password, False)
+    api.login(email, password)
     return api
 
 def scrinit():
