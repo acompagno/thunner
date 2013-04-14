@@ -189,12 +189,12 @@ def drawlist(scr,list_height,width,offset,songs,item,code,colors,colormap):
         else:
             break
 
-def pause(p,q):
+def pause(p):
     p.stdin.write(' ')
 
 def play(song):
     with open(os.devnull, 'w') as temp:
-        proc =  subprocess.Popen(["mplayer", "-noconfig", "all","%s" % song], stdin=subprocess.PIPE, stdout=temp, stderr=temp)
+        proc =  subprocess.Popen(["mplayer", "-noconfig", "all", "%s" % song], stdin=subprocess.PIPE, stdout=temp, stderr=temp)
         return proc
 
 def collect(tree,l,c_item):
@@ -215,7 +215,7 @@ def gen_trees(library):
     artists_dict = collections.defaultdict(list)
     for i in library:
         # Add albumArtist of i as key if it doesn't exist and add song as key list item
-        artists_dict[i['albumArtist']].append(i)
+        artists_dict[i['albumArtist'] if i['albumArtist'] != "" else i['artist']].append(i)
     # Initialise lists for artists and albums to return
     artists = []
     albums = []
@@ -263,8 +263,7 @@ def headphones(scr,height,code):
 def switch_menu(menu):
     new_list = menu["subtree"]
     new_item = menu["subtreeline"]
-    new_n = len(new_list)
-    return menu, new_list, new_item, new_n
+    return menu, new_list, new_item
         
 def main():
     
@@ -301,17 +300,18 @@ def main():
         playlists = list_playlists(api,playlist_ids)
 
         scr.clear()
+        now_playing = {"name":"Now Playing", "subtree":[], "subtreeline":0 }
         toplevel = { "name":"Toplevel",
                      "subtree":[ {"name":"Artists", "subtree":artists, "subtreeline":0 }, 
                                  {"name":"Albums", "subtree":albums, "subtreeline":0 }, 
                                  {"name":"Songs", "subtree":library, "subtreeline":0 }, 
-                                 {"name":"Playlists", "subtree":playlists, "subtreeline":0 }],
+                                 {"name":"Playlists", "subtree":playlists, "subtreeline":0 },
+                                 now_playing],
                      "subtreeline":0 }
         
         c_menu = toplevel
         c_list = c_menu["subtree"]
         c_item = c_menu["subtreeline"]
-        c_n = len(c_list)
         
         previous = []
         
@@ -323,7 +323,6 @@ def main():
         
         queue = []
         q_n = 0
-        q_length = 0
 
         status = 'Stopped'
         current_song = None
@@ -363,25 +362,24 @@ def main():
                         queue = []
                     if c == ord('\n'):
                         if c_list != []:
-                            l, n = collect(c_list,[],c_item)
-                            queue = l
-                            q_n = n
-                            q_length = len(queue)
+                            queue, q_n = collect(c_list,[],c_item)
                     elif c == ord(']'):
                         if 'id' in i:
                             queue = [i]
                             q_n = 0
-                            q_length = 1
                         else:
-                            l, n = collect(c_list[c_item]['subtree'],[],'')
-                            queue = l
-                            q_n = n
-                            q_length = len(queue)
-                    if queue != [] and q_n < q_length:
+                            queue, q_n = collect(c_list[c_item]['subtree'],[],'')
+                    if queue != [] and q_n < len(queue):
                         song = queue[q_n]
                         current_song = song
                         status = 'Playing:'
                         playing = play(api.get_stream_url(song['id']))
+                    else:
+                        song = None
+                        current_song = song
+                        status = 'Stopped'
+                    now_playing['subtree'] = queue
+                    now_playing['subtreeline'] = q_n
             elif c == ord('.'):
                 if isinstance(playing, subprocess.Popen):
                     playing.terminate()
@@ -400,13 +398,13 @@ def main():
                     status = 'Playing:'
             elif c == curses.KEY_LEFT:
                 if previous:
-                    c_menu, c_list, c_item, c_n = switch_menu(previous.pop())
+                    c_menu, c_list, c_item = switch_menu(previous.pop())
             elif c == curses.KEY_RIGHT:
                 if c_list and "subtree" in c_list[c_item]:
                     previous.append(c_menu)
-                    c_menu, c_list, c_item, c_n = switch_menu(c_list[c_item])
+                    c_menu, c_list, c_item = switch_menu(c_list[c_item])
             elif c == curses.KEY_DOWN: 
-                if c_item < c_n-1:
+                if c_item < len(c_list)-1:
                     c_item += 1
                 else:
                     c_item = 0
@@ -415,13 +413,13 @@ def main():
                 if c_item > 0:
                     c_item -= 1
                 else:
-                    c_item = c_n-1
+                    c_item = len(c_list)-1
                 c_menu["subtreeline"] = c_item
             elif c == curses.KEY_NPAGE:
-                if c_item < c_n-10:
+                if c_item < len(c_list)-10:
                     c_item += 10
                 else:
-                    c_item = c_n
+                    c_item = len(c_list)-1
                 c_menu["subtreeline"] = c_item
             elif c == curses.KEY_PPAGE:
                 if c_item > 10:
@@ -434,10 +432,7 @@ def main():
                     status = 'Paused:'
                 else:
                     status = 'Playing:'
-                q = Queue()
-                thread = Thread(target=pause, args=(playing,q))
-                thread.daemon = True
-                thread.start()
+                pause(playing)
             elif c == curses.KEY_RESIZE:
                 height, width = scr.getmaxyx()
                 viewheight = height-header_height-footer_height
