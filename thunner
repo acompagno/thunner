@@ -33,6 +33,7 @@ import subprocess
 import collections
 import sys
 import signal
+import random
 
 from Queue import Queue, Empty
 from threading import Thread
@@ -67,8 +68,8 @@ def parse_config():
                 elif words[0] == 'assign':
                     config['assignments'][words[2]] = words[1]
             if 'pass' not in config:
-		    # If Password not in Config, ask for it
-		    config['pass'] = getpass()
+                    # If Password not in Config, ask for it
+                    config['pass'] = getpass()
     except IOError:
         print "Can't find ~/.thunnerrc"
         sys.exit()
@@ -191,6 +192,9 @@ def drawlist(scr, list_height, width, offset, songs, item, code, colors, colorma
 
 def pause(p):
     p.stdin.write(' ')
+
+def stop(p):
+    p.stdin.write('q')
 
 def play(song):
     with open(os.devnull, 'w') as temp:
@@ -323,6 +327,8 @@ def main():
         
         play_queue = []
         play_index = 0
+        unplayed_indices = []
+        is_random = False
 
         status = 'Stopped'
         current_song = None
@@ -340,10 +346,19 @@ def main():
                 # We've had no input
                 # Let's check if a song has stopped playing and we need to play the next in the queue
                 if isinstance(playing, subprocess.Popen) and playing.poll() != None:
-                    # Song has stopped playing
-                    play_index = (play_index + 1) % len(play_queue)
+                    #if we've played everything, then regenerate the list of unplayed indices
+                    if len(unplayed_indices) == 0:
+                        unplayed_indices = range(len(play_queue))
+                    if is_random:
+                        play_index = random.choice(unplayed_indices)
+                    else:
+                        play_index = (play_index + 1) % len(play_queue)
                     current_song = play_queue[play_index]
                     playing = play(api.get_stream_url(current_song['id']))
+                    try:
+                        unplayed_indices.remove(play_index)
+                    except: #don't care if its not in there
+                        pass
                 else:
                     redraw = False #Nothing is going on, why redraw?
             elif c == ord('q'): 
@@ -358,12 +373,13 @@ def main():
                     if isinstance(playing, subprocess.Popen):
                         playing.terminate()
                         play_queue = []
-			playing = None
+                        playing = None
+                        unplayed_indices = []
                     if c == ord('\n'):
                         if c_list != []:
                             play_queue, play_index = collect(c_list, [], c_item)
                     elif c == ord(']'):
-			item = c_list[c_item]
+                        item = c_list[c_item]
                         if 'id' in item:
                             play_queue = [item]
                             play_index = 0
@@ -373,6 +389,8 @@ def main():
                         current_song = play_queue[play_index]
                         status = 'Playing:'
                         playing = play(api.get_stream_url(current_song['id']))
+                        unplayed_indices = range(len(play_queue))
+                        unplayed_indices.remove(play_index)
                     else:
                         current_song = None
                         status = 'Stopped'
@@ -385,13 +403,19 @@ def main():
                     current_song = play_queue[play_index]
                     playing = play(api.get_stream_url(current_song['id']))
                     status = 'Playing:'
-            elif c == ord(', '):
+                    if play_index in unplayed_indices:
+                        unplayed_indices.remove(play_index)
+            elif c == ord(','):
                 if isinstance(playing, subprocess.Popen):
                     playing.terminate()
                     play_index = (play_index - 1) % len(play_queue)
                     current_song = play_queue[play_index]
                     playing = play(api.get_stream_url(current_song['id']))
                     status = 'Playing:'
+                    if play_index in unplayed_indices:
+                        unplayed_indices.remove(play_index)
+            elif c == ord('r'):
+                is_random = not is_random
             elif c == curses.KEY_LEFT:
                 if previous:
                     c_menu, c_list, c_item = switch_menu(previous.pop())
@@ -446,10 +470,13 @@ def main():
                                              (current_song['name'], 'current-song')], code, colors, colormap)
                 drawlist(scr, viewheight, width, header_height, c_list, c_item, code, colors, colormap)
                 scr.refresh()
+    except Exception as e:
+        with open("error.log", "a") as errlog:
+            errlog.write(str(e))
     finally:
-        if isinstance(playing, subprocess.Popen):
-            playing.terminate()
         scrrelease(scr)
+        if isinstance(playing, subprocess.Popen) and playing.poll() == None:
+            playing.terminate()
         if api:
             api.logout()
     return
