@@ -342,9 +342,8 @@ def main():
                 if isinstance(playing, subprocess.Popen) and playing.poll() != None:
                     # Song has stopped playing
                     q_n = (q_n + 1) % len(queue)
-                    song = queue[q_n]
-                    playing = play(api.get_stream_url(song['id']))
-                    current_song = song
+                    current_song = queue[q_n]
+                    playing = play(api.get_stream_url(current_song['id']))
                 else:
                     redraw = False #Nothing is going on, why redraw?
             elif c == ord('q'): 
@@ -356,7 +355,6 @@ def main():
                     break
             elif c == ord('\n') or c == ord(']'):
                 if c_list:
-                    i = c_list[c_item]
                     if isinstance(playing, subprocess.Popen):
                         playing.terminate()
                         queue = []
@@ -364,37 +362,34 @@ def main():
                         if c_list != []:
                             queue, q_n = collect(c_list,[],c_item)
                     elif c == ord(']'):
-                        if 'id' in i:
-                            queue = [i]
+			item = c_list[c_item]
+                        if 'id' in item:
+                            queue = [item]
                             q_n = 0
                         else:
                             queue, q_n = collect(c_list[c_item]['subtree'],[],'')
                     if queue != [] and q_n < len(queue):
-                        song = queue[q_n]
-                        current_song = song
+                        current_song = queue[q_n]
                         status = 'Playing:'
-                        playing = play(api.get_stream_url(song['id']))
+                        playing = play(api.get_stream_url(current_song['id']))
                     else:
-                        song = None
-                        current_song = song
+                        current_song = None
                         status = 'Stopped'
-                    now_playing['subtree'] = queue
+                    now_playing['subtree'] = list(queue)
                     now_playing['subtreeline'] = q_n
             elif c == ord('.'):
                 if isinstance(playing, subprocess.Popen):
                     playing.terminate()
                     q_n = (q_n + 1) % len(queue)
-                    song = queue[q_n]
-                    playing = play(api.get_stream_url(song['id']))
-                    current_song = song
+                    current_song = queue[q_n]
+                    playing = play(api.get_stream_url(current_song['id']))
                     status = 'Playing:'
             elif c == ord(','):
                 if isinstance(playing, subprocess.Popen):
                     playing.terminate()
                     q_n = (q_n - 1) % len(queue)
-                    song = queue[q_n]
-                    playing = play(api.get_stream_url(song['id']))
-                    current_song = song
+                    current_song = queue[q_n]
+                    playing = play(api.get_stream_url(current_song['id']))
                     status = 'Playing:'
             elif c == curses.KEY_LEFT:
                 if previous:
