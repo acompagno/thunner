@@ -159,6 +159,13 @@ def footer(scr, height, width, status, code, colors, colormap):
         scr.addch(height-2, i, curses.ACS_HLINE, curses.color_pair(colors[colormap['footer-border']]))
     drawstring(scr, height-1, 0, width, status, code, colors, colormap)
 
+def song_to_str(song):
+    title = song['name']
+    track = str(song['track']) if ('track' in song and song['track'] != 0) else 'x'
+    artist = song['albumArtist'] if song['albumArtist'] != "" else (song['artist'] if song['artist'] != "" else 'Unknown Artist')
+    album = song['album'] if song['album'] != "" else "Untitled Album"
+    return artist  + " - " + album + " - " + track + " - " + title
+
 def drawlist(scr, list_height, width, offset, songs, item, code, colors, colormap):
     n_songs = len(songs)
     top_half = list_height // 2
@@ -175,11 +182,11 @@ def drawlist(scr, list_height, width, offset, songs, item, code, colors, colorma
         if i < n_songs:
             song = songs[i]
             if "id" in song:
-                s = (str(song['track']) if 'track' in song else 'x') + '. ' + song['name']
+                s = song_to_str(song)
             else:
                 s = song["name"]
-            slen = len(s)
             s = s.encode(code)
+            slen = len(s)
             try:
                 if i == item:
                     drawline(scr, offset+i-cl, width, slen+2, ("* " + s, colors[colormap['current-item']]))
@@ -219,7 +226,7 @@ def gen_trees(library):
     artists_dict = collections.defaultdict(list)
     for i in library:
         # Add albumArtist of i as key if it doesn't exist and add song as key list item
-        artists_dict[i['albumArtist'] if i['albumArtist'] != "" else i['artist']].append(i)
+        artists_dict[i['albumArtist'] if i['albumArtist'] != "" else (i['artist'] if i['artist'] != "" else 'Unknown Artist')].append(i)
     # Initialise lists for artists and albums to return
     artists = []
     albums = []
@@ -231,9 +238,7 @@ def gen_trees(library):
             albums_of_artist_dict[i['album']].append(i)
         albums_of_artist = []
         for album, tracks in albums_of_artist_dict.iteritems():
-            album_name = album
-            if album == "":
-                album_name = "Untitled Album"
+            album_name = album if album != "" else "Untitled Album"
 
             if(len(tracks) > 0 and 'track' in tracks[0]):
                 tracks = sorted(tracks, key=itemgetter('track'))
