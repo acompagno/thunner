@@ -33,10 +33,11 @@ import subprocess
 import collections
 import sys
 import signal
+import logging
 
 from Queue import Queue, Empty
 from threading import Thread
-from gmusicapi import Webclient
+from gmusicapi import Mobileclient
 from getpass import getpass
 from operator import itemgetter
 
@@ -62,6 +63,8 @@ def parse_config():
                     config['email'] = words[1]
                 elif words[0] == 'pass':
                     config['pass'] = i.split(' ',1)[1]
+                elif words[0] == 'deviceid':
+                    config['deviceid'] = i.split(' ',1)[1].strip()
                 elif words[0] == 'color':
                     config['colors'].append((words[1],words[2],words[3]))
                 elif words[0] == 'assign':
@@ -105,7 +108,7 @@ def name_colors(colordefs):
     return colormap
 
 def apiinit(email,password):
-    api = Webclient()
+    api = Mobileclient()
     api.login(email, password)
     return api
 
@@ -172,8 +175,8 @@ def drawlist(scr,list_height,width,offset,songs,item,code,colors,colormap):
     for i in range(cl,cl+list_height):
         if i < n_songs:
             song = songs[i]
-            if "id" in song:
-                s = str(song['track']) + '. ' + song['name']
+            if "trackNumber" in song:
+                s = str(song['trackNumber']) + '. ' + song['title']
             else:
                 s = song["name"]
             slen = len(s)
@@ -230,7 +233,7 @@ def gen_trees(library):
             if album == "":
                 album_name = "Untitled Album"
             albums_of_artist.append({ "name":album_name,
-                                      "subtree":sorted(tracks,key=itemgetter('track')),
+                                      "subtree":sorted(tracks,key=itemgetter('trackNumber')),
                                       "subtreeline":0 })
         albums = albums + albums_of_artist
         artists.append({ "name":artist,
@@ -292,8 +295,7 @@ def main():
         library = api.get_all_songs()
         artists, albums = gen_trees(library)
 
-        playlist_ids = api.get_all_playlist_ids()
-        playlists = list_playlists(api,playlist_ids)
+        playlists = api.get_all_playlists()
 
         scr.clear()
         toplevel = { "name":"Toplevel",
@@ -338,7 +340,7 @@ def main():
                     # Song has stopped playing
                     q_n = (q_n + 1) % len(queue)
                     song = queue[q_n]
-                    playing = play(api.get_stream_url(song['id']))
+                    playing = play(api.get_stream_url(song['id'], config['deviceid']))
                     current_song = song
             elif c == ord('q'):
                 if isinstance(playing, subprocess.Popen):
@@ -373,13 +375,13 @@ def main():
                         song = queue[q_n]
                         current_song = song
                         status = 'Playing:'
-                        playing = play(api.get_stream_url(song['id']))
+                        playing = play(api.get_stream_url(song['id'], config['deviceid']))
             elif c == ord('.'):
                 if isinstance(playing, subprocess.Popen):
                     playing.terminate()
                     q_n = (q_n + 1) % len(queue)
                     song = queue[q_n]
-                    playing = play(api.get_stream_url(song['id']))
+                    playing = play(api.get_stream_url(song['id'], config['deviceid']))
                     current_song = song
                     status = 'Playing:'
             elif c == ord(','):
@@ -387,7 +389,7 @@ def main():
                     playing.terminate()
                     q_n = (q_n - 1) % len(queue)
                     song = queue[q_n]
-                    playing = play(api.get_stream_url(song['id']))
+                    playing = play(api.get_stream_url(song['id'], config['deviceid']))
                     current_song = song
                     status = 'Playing:'
             elif c == curses.KEY_LEFT:
@@ -427,7 +429,7 @@ def main():
                                          (' ','text'),
                                          (current_song['artist'],'current-artist'),
                                          (' - ','footer-sep'),
-                                         (current_song['name'],'current-song')],code,colors,colormap)
+                                         (current_song['title'],'current-song')],code,colors,colormap)
             drawlist(scr,viewheight,width,header_height,c_list,c_item,code,colors,colormap)
             scr.refresh()
     finally:
