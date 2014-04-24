@@ -34,10 +34,12 @@ import collections
 import sys
 import signal
 import random
+import logging
+import traceback
 
 from Queue import Queue, Empty
 from threading import Thread
-from gmusicapi import Webclient
+from gmusicapi import Mobileclient
 from getpass import getpass
 from operator import itemgetter
 
@@ -63,6 +65,8 @@ def parse_config():
                     config['email'] = words[1]
                 elif words[0] == 'pass':
                     config['pass'] = i.split(' ', 1)[1]
+                elif words[0] == 'deviceid':
+                    config['deviceid'] = i.split(' ', 1)[1].strip()
                 elif words[0] == 'color':
                     config['colors'].append((words[1], words[2], words[3]))
                 elif words[0] == 'assign':
@@ -106,10 +110,7 @@ def name_colors(colordefs):
     return colormap
 
 def apiinit(email, password):
-    api = Webclient()
-    
-    logged_in = False
-    attempts = 0
+    api = Mobileclient()
     api.login(email, password)
     return api
 
@@ -161,8 +162,8 @@ def footer(scr, height, width, status, code, colors, colormap):
     drawstring(scr, height-1, 0, width, status, code, colors, colormap)
 
 def song_to_str(song):
-    title = song['name']
-    track = str(song['track']) if ('track' in song and song['track'] != 0) else 'x'
+    title = song['title']
+    track = str(song['track']) if ('track' in song and song['track'] != 0) else str(song['trackNumber']) if ('trackNumber' in song and song['trackNumber'] != 0) else 'x'
     artist = song['albumArtist'] if song['albumArtist'] != "" else (song['artist'] if song['artist'] != "" else 'Unknown Artist')
     album = song['album'] if song['album'] != "" else "Untitled Album"
     return artist  + " - " + album + " - " + track + " - " + title
@@ -182,7 +183,7 @@ def drawlist(scr, list_height, width, offset, songs, item, code, colors, colorma
     for i in range(cl, cl+list_height):
         if i < n_songs:
             song = songs[i]
-            if "id" in song:
+            if "id" in song or "trackNumber" in song:
                 s = song_to_str(song)
             else:
                 s = song["name"]
@@ -245,7 +246,7 @@ def gen_trees(library):
                 tracks = sorted(tracks, key=itemgetter('track'))
 
             albums_of_artist.append({ "name":album_name,
-                                      "subtree":tracks,
+                                      "subtree":sorted(tracks, key=itemgetter('trackNumber')),
                                       "subtreeline":0 })
         albums.extend(albums_of_artist)
         artists.append({ "name":artist, 
@@ -253,11 +254,12 @@ def gen_trees(library):
                          "subtreeline":0 })
     return sorted(artists, key=lambda x: x['name'].lower()), sorted(albums, key=lambda x: x['name'].lower())
 
-def list_playlists(api, playlist_ids):
+def list_playlists(api, playlist_list):
+    #TODO: Fix this
     playlists = []
-    for name, pids in playlist_ids['user'].iteritems():
-        for pid in pids:
-            playlists.append( { "name":name, "subtree":api.get_playlist_songs(pid), "subtreeline":0 } )
+    for playlist in playlist_list:
+        for track in playlist['track']:
+            playlists.append( { "name":playlist['name'], "subtree":api.get_playlist_songs(pid), "subtreeline":0 } )
     return playlists
 
 def headphones(scr, height, code):
@@ -306,8 +308,7 @@ def main():
         library = api.get_all_songs()
         artists, albums = gen_trees(library)
 
-        playlist_ids = api.get_all_playlist_ids()
-        playlists = list_playlists(api, playlist_ids)
+        #playlists = list_playlists(api, api.get_all_user_playlist_contents())
 
         scr.clear()
         now_playing = {"name":"Now Playing", "subtree":[], "subtreeline":0 }
@@ -315,7 +316,7 @@ def main():
                      "subtree":[ {"name":"Artists", "subtree":artists, "subtreeline":0 }, 
                                  {"name":"Albums", "subtree":albums, "subtreeline":0 }, 
                                  {"name":"Songs", "subtree":library, "subtreeline":0 }, 
-                                 {"name":"Playlists", "subtree":playlists, "subtreeline":0 },
+                                 #{"name":"Playlists", "subtree":playlists, "subtreeline":0 },
                                  now_playing],
                      "subtreeline":0 }
 
@@ -360,7 +361,7 @@ def main():
                     else:
                         play_index = (play_index + 1) % len(play_queue)
                     current_song = play_queue[play_index]
-                    playing = play(api.get_stream_url(current_song['id']))
+                    playing = play(api.get_stream_url(current_song['id'], config['deviceid']))
                     try:
                         unplayed_indices.remove(play_index)
                     except: #don't care if its not in there
@@ -394,7 +395,7 @@ def main():
                     if play_queue != [] and play_index < len(play_queue):
                         current_song = play_queue[play_index]
                         status = 'Playing:'
-                        playing = play(api.get_stream_url(current_song['id']))
+                        playing = play(api.get_stream_url(current_song['id'], config['deviceid']))
                         unplayed_indices = range(len(play_queue))
                         unplayed_indices.remove(play_index)
                     else:
@@ -407,7 +408,7 @@ def main():
                     playing.terminate()
                     play_index = (play_index + 1) % len(play_queue)
                     current_song = play_queue[play_index]
-                    playing = play(api.get_stream_url(current_song['id']))
+                    playing = play(api.get_stream_url(current_song['id'], config['deviceid']))
                     status = 'Playing:'
                     if play_index in unplayed_indices:
                         unplayed_indices.remove(play_index)
@@ -416,7 +417,8 @@ def main():
                     playing.terminate()
                     play_index = (play_index - 1) % len(play_queue)
                     current_song = play_queue[play_index]
-                    playing = play(api.get_stream_url(current_song['id']))
+                    playing = play(api.get_stream_url(current_song['id'], config['deviceid']))
+                    current_song = song
                     status = 'Playing:'
                     if play_index in unplayed_indices:
                         unplayed_indices.remove(play_index)
@@ -473,12 +475,13 @@ def main():
                                              (' ', 'text'),
                                              (current_song['artist'], 'current-artist'),
                                              (' - ', 'footer-sep'),
-                                             (current_song['name'], 'current-song')], code, colors, colormap)
+                                             (current_song['title'], 'current-song')], code, colors, colormap)
                 drawlist(scr, viewheight, width, header_height, c_list, c_item, code, colors, colormap)
                 scr.refresh()
     except Exception as e:
         with open("error.log", "a") as errlog:
-            errlog.write(str(e))
+            type, value, trace = sys.exc_info()
+            traceback.print_exception(type, value, trace, file=errlog)
     finally:
         scrrelease(scr)
         if isinstance(playing, subprocess.Popen) and playing.poll() == None:
