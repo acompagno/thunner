@@ -347,6 +347,7 @@ def main():
         scr.timeout(timeout)
         scr.refresh()
         while True:
+            curses.flushinp()
             c = scr.getch()
             redraw = True
             if c == -1:
