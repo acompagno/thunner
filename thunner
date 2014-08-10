@@ -36,10 +36,12 @@ import signal
 import random
 import logging
 import traceback
+import datetime
 
 from Queue import Queue, Empty
 from threading import Thread
 from gmusicapi import Mobileclient
+from gmusicapi import Webclient
 from getpass import getpass
 from operator import itemgetter
 
@@ -77,6 +79,9 @@ def parse_config():
     except IOError:
         print "Can't find ~/.thunnerrc"
         sys.exit()
+    for arg in sys.argv:
+        if arg == '-d' or arg == '--debug':
+            config['debug'] = true
     return config
 
 def color(c):
@@ -112,7 +117,16 @@ def name_colors(colordefs):
 def apiinit(email, password):
     api = Mobileclient()
     api.login(email, password)
-    return api
+    webClient = Webclient()
+    isWebClientLoggedIn = webClient.login(email, password)
+    if isWebClientLoggedIn:
+        deviceId = getDeviceId(webClient)
+    return api, deviceId
+
+def getDeviceId(webClient):
+    deviceIds = webClient.get_registered_devices()
+    deviceId = deviceIds[0]['id']
+    return deviceId[2:] if deviceId[:2] == '0x' else deviceId
 
 def scrinit():
     stdscr = curses.initscr()
@@ -128,6 +142,14 @@ def scrrelease(s):
     s.keypad(0)
     curses.echo()
     curses.endwin()
+
+def writeToDebug(message, config):
+    #Debug is not enabled
+    if not config['debug']: 
+        return 
+    timeStamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+    with open('debug.log', 'a') as debugLog:
+        debugLog.write('[%s] %s\n\n' % (timeStamp, message))
 
 def drawstring(scr, y, x, width, cslist, code, colors, colormap):
     for i in cslist:
@@ -207,6 +229,7 @@ def stop(p):
 
 def play(song):
     with open(os.devnull, 'w') as temp:
+        writeToDebug('Playing Song %s' % song, )
         proc =  subprocess.Popen(["mplayer", "-noconfig", "all", "%s" % song], stdin=subprocess.PIPE, stdout=temp, stderr=temp)
         return proc
 
@@ -291,6 +314,7 @@ def main():
     colormap = config['assignments']
 
     api = None
+    deviceId = None
     playing = None
     try:
         height, width = scr.getmaxyx()
@@ -299,12 +323,13 @@ def main():
 
         scr.refresh()
 
-        api = apiinit(config['email'], config['pass'])
+        api, deviceId = apiinit(config['email'], config['pass'])
         
         if not api.is_authenticated():
             print "Credentials were not accepted. Exiting..."
             return
 
+        config['deviceid'] = deviceId
         library = api.get_all_songs()
         artists, albums = gen_trees(library)
 
