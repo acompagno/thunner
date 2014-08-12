@@ -81,7 +81,7 @@ def parse_config():
         sys.exit()
     for arg in sys.argv:
         if arg == '-d' or arg == '--debug':
-            config['debug'] = true
+            config['debug'] = True
     return config
 
 def color(c):

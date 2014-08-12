@@ -1,0 +1,97 @@
+#!/usr/bin/env python2
+
+# Copyright (c) <2012>, <Malcolm Still a.k.a. klltkr>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#     * Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#     * Neither the name of the <organization> nor the
+#       names of its contributors may be used to endorse or promote products
+#       derived from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+import curses
+import os
+import time
+import locale
+import subprocess
+import collections
+import sys
+import signal
+import random
+import logging
+import traceback
+import datetime
+import argparse
+
+from Queue import Queue, Empty
+from threading import Thread
+from gmusicapi import Mobileclient
+from gmusicapi import Webclient
+from getpass import getpass
+from operator import itemgetter
+
+def main():
+    config = parseConfig()
+    print config['debug']
+def parseConfig():
+    defaultcolors = { 'thunner':'default',
+                      'header-text':'default',
+                      'header-sep':'default',
+                      'header-border':'default',
+                      'footer-border':'default',
+                      'footer-sep':'default',
+                      'status':'default',
+                      'current-artist':'default',
+                      'current-song':'default',
+                      'current-item':'default',
+                      'text':'default' }
+    config = { 'colors':[], 'assignments':defaultcolors }
+    try:
+        with open(os.path.expanduser("~/.thunnerrc")) as f:
+            lines = f.readlines()
+            for i in lines:
+                words = i.split()
+                if words[0] == 'email':
+                    config['email'] = words[1]
+                elif words[0] == 'pass':
+                    config['pass'] = i.split(' ', 1)[1]
+                elif words[0] == 'deviceid':
+                    config['deviceid'] = i.split(' ', 1)[1].strip()
+                elif words[0] == 'color':
+                    config['colors'].append((words[1], words[2], words[3]))
+                elif words[0] == 'assign':
+                    config['assignments'][words[2]] = words[1]
+            if 'pass' not in config:
+                pass
+                    # If Password not in Config, ask for it
+                    # config['pass'] = getpass()
+    except IOError:
+        print "Can't find ~/.thunnerrc"
+        sys.exit()
+    parser = argparse.ArgumentParser(description='Command Line Google Play Music Client.')
+    parser.add_argument('-d', '--debug', 
+                action="store_true",
+                default=False,
+                help='Write to debug log contained in the logs directory')
+    args = parser.parse_args()
+    config['debug'] = args.debug
+    return config 
+
+if __name__ == '__main__':
+    main()
