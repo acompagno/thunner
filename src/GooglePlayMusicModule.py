@@ -38,6 +38,11 @@ class GooglePlayMusicAdapter:
 	    deviceId = deviceIds[0]['id']
 	    self.deviceId = deviceId[2:] if deviceId[:2] == '0x' else deviceId
 
+	def getUrlForSong(self, song):
+		streamUrl = self.mobileClient.get_stream_url(song['id'], self.deviceId)
+		self.log.debug('Got url for song %s \n\t URL - %s' % (song['title'], streamUrl))
+		return streamUrl
+
 	def getRandUrl(self):
 		if self.allSongs == None:
 			self.allSongs = self.mobileClient.get_all_songs()
