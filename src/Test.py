@@ -19,4 +19,12 @@ for i in range(10):
 	player.addSongToQueue(song)
 
 player.play()
-raw_input('waitin')
+
+while True:
+	usrInput = raw_input('waitin')
+	if usrInput == 'n':
+		player.next()
+	elif usrInput == 'p':
+		player.toggle()
+	elif usrInput == 'e':
+		sys.exit()

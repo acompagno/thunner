@@ -40,7 +40,6 @@ class GSTPlayer:
 			if self.queue.empty():
 				self.log.debug('Finished queue')
 				self.sleepPlayer()
-				self.player.set_property('uri', None)
 			else:
 				self.next()
 
@@ -64,6 +63,14 @@ class GSTPlayer:
 		self.queue.put(song)
 		self.log.debug('Added song to queue - %s' % song['title'])
 
+	def getCurrentPlayerState(self):
+		currentStates = self.player.get_state()
+		for state in currentStates:
+			if isinstance(state, gst.State):
+				self.log.debug('Current state - %s' % state.value_name)
+				return state
+
+
 	# CONTROL MUSIC 
 	def pause(self):
 		self.setPlayerState(gst.STATE_PAUSED)
@@ -75,7 +82,11 @@ class GSTPlayer:
 			self.setPlayerState(gst.STATE_PLAYING)
 
 	def toggle(self):
-		pass
+		currentState = self.getCurrentPlayerState()
+		if gst.STATE_PAUSED == currentState or gst.STATE_READY == currentState:
+			self.play()
+		elif gst.STATE_PLAYING == currentState:
+			self.pause()
 
 	def next(self):
 		if self.queue.empty():
