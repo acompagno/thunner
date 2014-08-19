@@ -3,6 +3,7 @@ import gtk
 import gst
 import sys
 
+from GUIAdapter import GUIAdapter
 from GooglePlayMusicModule import GooglePlayMusicAdapter
 from ThunnerLogger import ThunnerLogger
 from GSTPlayer import GSTPlayer
@@ -15,40 +16,20 @@ log = ThunnerLogger(config)
 api = GooglePlayMusicAdapter(config, log)
 player = GSTPlayer(log)
 player.setMusicApi(api)
-
-# allSongs = api.mobileClient.get_all_songs()
-
-# # albums = set([api.getAlbumForSong(song) for song in songs])
-
-
-# for song in allSongs:
-# 	songAlbum = api.getAlbumForSong(song)
-# 	songTitle = api.getTitleForSong(song)
-# 	songs[songTitle] = song
-# 	if songAlbum not in albums:
-# 		albums[songAlbum] = {'__FLAGS__' : ['LOWEST_LEVEL', 'SONGS']}
-# 	albums[songAlbum][songTitle] = song
-
-# for album in albums:
-# 	albums[album] = OrderedDict(sorted(albums[album].items(), key=lambda s: api.getTrackNumberForSong(s[1])))
-# 	albumArtist = api.getArtistForSong(albums[album].values()[-1])
-# 	if albumArtist not in artists:
-# 		artists[albumArtist] = {}
-# 	artists[albumArtist][album] = (albums[album])
+gui = GUIAdapter(config)
 
 tree = api.generateTrees()
-artists = tree['Artists']
-albums = tree['Albums']
-songs = tree['Songs']
+gui.drawTree(tree['Songs'])
+gui.displayCursor(0)
+while True:
+	a = gui.getScr().getch()
+	log.debug(a)
+	if a == 259:
+		gui.scrollUp()
+	elif a == 258:
+		gui.scrollDown()
+	else:
+		break
+gui.closeScr()
 
-api.dumpTree(tree, 0)
-# for a in artists:
-# 	print a
-# 	for album in artists[a]:
-# 		print '\t%s' % album
-# 		for songIndex in artists[a][album]:
-# 			if songIndex == '__FLAGS__':
-# 				print '\t\tTree Flags - %s' % artists[a][album][songIndex]
-# 				continue
-# 			song = artists[a][album][songIndex]
-# 			print '\t\t%s) %s' % (api.getTrackNumberForSong(song), api.getTitleForSong(song))
+# api.dumpTree(tree, 0)
