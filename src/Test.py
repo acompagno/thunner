@@ -16,18 +16,22 @@ log = ThunnerLogger(config)
 api = GooglePlayMusicAdapter(config, log)
 player = GSTPlayer(log)
 player.setMusicApi(api)
-gui = GUIAdapter(config)
+gui = GUIAdapter(config, log)
 
 tree = api.generateTrees()
-gui.drawTree(tree['Songs'])
+gui.drawTree(tree)
 gui.displayCursor(0)
 while True:
 	a = gui.getScr().getch()
 	log.debug(a)
-	if a == 259:
+	if a == 259: # up
 		gui.scrollUp()
-	elif a == 258:
+	elif a == 258: # Down
 		gui.scrollDown()
+	elif a == 260: # left 
+		pass
+	elif a == 261: # right
+		gui.nextTree()
 	else:
 		break
 gui.closeScr()
