@@ -6,20 +6,34 @@ class GUIAdapter:
     FOOTER_HEIGHT = 2
     HEADER_HEIGHT = 2
 
+    # ThunnerLogger object
     log  = None
-    config = None
-    stdScr = None
-    encoding = None
-    colors = None
-    colorMap = None
+    # GSTPlayer object 
     gstPlayer = None 
+    # Music Api Object
     musicApi = None
+    # Holds the configuration dict for the application
+    config = None
+    
+    # Holds the SCR where the GUI is being displayed
+    stdScr = None
+    # Holds the current encoding of the terminal
+    encoding = None
+    # Holds the current tree being displayed
     currentTree = None
+    # Holds the current cursor position in relation to the displayable list
     cursorPosition = 0
+    # The starting index of the list being displayed in relation to fullDisplayList
     currentDisplayListStart = 0
+    # The ending index of the list being displayed in relation to fullDisplayList
     currentDisplayListEnd = 0
+    # List containing all items of the tree currently being displayed
     fullDisplayList = None
+    # Number of items currently being displayed
     displayListSize = 0
+
+    # Path to current tree being displayed
+    path = []
 
     def __init__(self, config, log):
         self.config = config
@@ -44,11 +58,17 @@ class GUIAdapter:
         curses.echo()
         curses.endwin()
 
+    def writeStr(self, y, x, string):
+        self.stdScr.addstr(y, x, string.encode(self.encoding))
+
+    def writeChar(self, y, x, char):
+        self.stdScr.addch(y, x, char)
+
     def drawLineAtY(self, y, width = None):
-        if width == None:
+        if width is None:
             height, width = self.stdScr.getmaxyx()
         for i in range(1, width - 1):
-            self.stdScr.addch(y, i, curses.ACS_HLINE)
+            self.writeChar(y, i, curses.ACS_HLINE)
 
     def drawTree(self, tree):
         self.currentTree = tree
@@ -57,6 +77,9 @@ class GUIAdapter:
         displayList = tree.keys()
         if '__FLAGS__' in displayList:
             displayList.remove('__FLAGS__')
+            self.flags = tree['__FLAGS__']
+        else:
+            self.flags = []
         self.fullDisplayList = displayList
         if len(displayList) > usableHeight:
             displayList = displayList[:usableHeight]
@@ -69,24 +92,26 @@ class GUIAdapter:
         self.clearList()
         for index, item in enumerate(displayList):
             nameLimit = len(item) if len(item) < width - 3 else width - 3
-            self.stdScr.addstr(self.HEADER_HEIGHT + 1 + index, 3, item[:nameLimit])
+            self.writeStr(self.HEADER_HEIGHT + 1 + index, 3, item[:nameLimit])
 
     def drawHeader(self):
         self.drawLineAtY(self.HEADER_HEIGHT)
-        self.stdScr.addstr(1, 1, 'thunner >')
+        self.clearLine(1)
+        self.writeStr(1, 1, ' > '.join(['thunner'] + self.path))
 
     def drawFooter(self):
         height, width = self.stdScr.getmaxyx()
         self.drawLineAtY(height - self.FOOTER_HEIGHT)
-        self.stdScr.addstr(height - 1, 1, 'Playing')
+        self.writeStr(height - 1, 1, 'Playing')
 
     def displayCursor(self, cursorPosition):
+        self.cursorPosition = cursorPosition
         realCursorHeight = self.getRealCursorPosition(cursorPosition)
-        self.stdScr.addstr(realCursorHeight, 1, '*')
+        self.writeStr(realCursorHeight, 1, '*')
 
     def removeCursor(self):
         realCursorHeight = self.getRealCursorPosition(self.cursorPosition)
-        self.stdScr.addstr(realCursorHeight, 1, ' ')
+        self.writeStr(realCursorHeight, 1, ' ')
 
     def getRealCursorPosition(self, cursorPosition):
         return self.HEADER_HEIGHT + cursorPosition + 1
@@ -104,13 +129,16 @@ class GUIAdapter:
 
     def clearLine(self, y, x = 0):
         height, width = self.stdScr.getmaxyx()
-        self.stdScr.addstr(y , x, ' ' * (width - x))
+        self.writeStr(y , x, ' ' * (width - x))
 
     def clearList(self):
         height, width = self.stdScr.getmaxyx()
-        usableHeight = height - self.FOOTER_HEIGHT - self.HEADER_HEIGHT - 1
+        usableHeight = height - self.FOOTER_HEIGHT
         for i in range(self.HEADER_HEIGHT + 1, usableHeight):
-            self.clearLine(i)
+            self.clearLine(i, x = 2)
+
+    def getFromDict(self, dataDict, mapList):
+        return reduce(lambda d, k: d[k], mapList, dataDict)
 
     """ Movement """
     def scrollDown(self):
@@ -118,24 +146,45 @@ class GUIAdapter:
             self.moveListDown()
         elif self.cursorPosition < self.displayListSize - 1:
             self.removeCursor()
-            self.cursorPosition += 1
-            self.displayCursor(self.cursorPosition)
+            self.displayCursor(self.cursorPosition + 1)
 
     def scrollUp(self):
         if self.currentDisplayListStart > 0 and self.cursorPosition == 0:
             self.moveListUp()
         elif self.cursorPosition > 0:
             self.removeCursor()
-            self.cursorPosition -= 1
-            self.displayCursor(self.cursorPosition)
+            self.displayCursor(self.cursorPosition - 1)
 
     def nextTree(self):
+        if 'LOWEST_LEVEL' in self.flags:
+            self.log.debug("Already on lowest level can't move to next subtree")
+            return
         cursorPosition = self.cursorPosition + self.currentDisplayListStart
         self.log.debug('Selected Item for next Tree: %s' % self.fullDisplayList[cursorPosition])
-        self.drawTree(self.currentTree[self.fullDisplayList[cursorPosition]])
+        newTreeName = self.fullDisplayList[cursorPosition]
+        self.path.append(newTreeName)
+        self.drawHeader()
+        self.drawTree(self.currentTree[newTreeName])
+        self.removeCursor()
+        self.displayCursor(0)
 
     def lastTree(self):
-        pass
+        if 'ROOT_LEVEL' in self.flags:
+            self.log.debug("Already on root level can't move back")
+            return
+        self.log.debug('Moving back to %s tree' % 'root' if len(self.path) < 2 else self.path[-2])
+        del self.path[-1]
+        self.drawHeader()
+        self.drawTree(self.getFromDict(self.musicApi.generateTrees(), self.path))
+        self.removeCursor()
+        self.displayCursor(0)
+
+    def refresh(self):
+        self.stdScr.clear()
+        self.drawHeader()
+        self.drawTree(self.currentTree)
+        self.displayCursor(self.cursorPosition)
+        self.drawFooter()
 
     """ Getters and setters """
 
@@ -144,7 +193,7 @@ class GUIAdapter:
 
     def setMusicApi(self, musicApi):
         self.musicApi = musicApi
-    
+
     def getFooterHeight(self):
         return self.FOOTER_HEIGHT
 
@@ -153,84 +202,3 @@ class GUIAdapter:
 
     def getScr(self):
         return self.stdScr
-
-
-
-"""
-    Addiction
-    1986
-    Insomnia [Guitar By Mike Hartnett]
-    Tuffest Man Alive
-    Guitar Solo
-    The Jig Is Up
-    What They Gonna Do Feat Sean Paul
-    Have U Seen Her (ft. Hit Skrewface)
-    The Purge (Feat. Tyler The Creator, Kurupt)
-    Black Republican feat. Jay-Z
-    Thugnificense (Prod. By Erick Arc Elliott)
-    He Man
-    It's Raw (feat. Action Bronson)
-    Ruthless Villain
-    Shoguns (feat. Cappadonna & Vinnie Paz)
-    Now Or Neva (Bonus Track)
-    Understand (feat. Dice Raw & Greg Porn)
-    Every Ghetto (Bonus Track)
-    Free My Soul
-    true love (chief featuring sene & blu)
-    Webbie Flow (U Like)
-    Intercontinental Champion
-    The Team
-    Rather Be With You (Bonus)
-    All of the Lights
-    The West
-    Cut You Off (To Grow Closer)
-    Fresh Ta Def
-    Can't Cry
-    Peso [Prod. By ASAP Ty Beats]
-    Interlude (That's Love)
-    Don't Worry
-    Clyde Smith
-    X Chords
-    Hunnid Stax (feat. ScHoolboy Q)
-    Cradle Rock (feat. Left Eye & Booster)
-    So Appalled (feat. RZA, Jay-Z, Pusha T, Swizz Beatz & Cyhi the Prynce)
-    Shooting Guns (featuring Kidd Kidd & Twane)
-    Dre Day
-    Undying Love
-    Skybourne (feat. Smoke DZA & Big K.R.I.T.)
-    Buggin' Out
-    Love Session (Feat. Ruff Endz)
-    Ifhy
-    Need U Bad (Remix)
-    Death By Numbers
-    Africa Must Wake Up Ft. K'naan
-    We Ball Feat Kendrick Lamar (Prod By Chase N Cashe)
-    48
-    Sunshine
-    Yesterday
-    Smoke Again (ft. Ab-Soul)
-    Greatest Rapper Ever
-    Maxine (Feat. Raekwon)
-    Hate (feat. Kanye West) 
-    II. Zealots of Stockholm (Free Information)
-    Last Real Nigga Alive
-    R4 Theme Song
-    Quote Me
-    U.B.R. (Unauthorized Biography Of Rakim)
-    Wassup [Prod. By Clams Casino]
-    Deeper (Instrumental)
-    Molliwopped
-    Do It Again [Put Ya Hands Up] (feat Beanie Sigel & Amil)
-    I Will
-    Can't Get Enough (feat. Trey Songz)
-    I Got Drank (Freestyle) (Bonus Track)
-    Deadly Medley (Feat. Royce Da 5'9, Elzhi)
-    The Big Payback [Prod. By Big K.R.I.T.]
-    See No Evil (Feat. Kendrick Lamar And Tank)
-    Drift Away [Prod. By Pro Logic]
-    PMW (All I Really Need) feat. ScHoolboy Q
-    Joy
-    The Last Stretch
-    the richers (tiron featuring asher roth & blu)
-
-"""

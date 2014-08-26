@@ -1,4 +1,3 @@
-import sys
 import random
 
 from gmusicapi import Mobileclient
@@ -15,10 +14,13 @@ class GooglePlayMusicAdapter:
     log = None
     deviceId = None 
     allSongs = None
+    trees = None
+    multipleDisks = None
 
     def __init__(self, config, log):
         self.log = log
         self.initializeApi(config['email'], config['pass'])
+        del config['pass']
         self.getDeviceId()
 
     def initializeApi(self, email, password):
@@ -32,6 +34,9 @@ class GooglePlayMusicAdapter:
         self.log.debug((self.LOG_MESSAGE_SUCCESS if isMobileClientLoggedIn else self.LOG_MESSAGE_FAIL) % ('Web', email))
         return isMobileClientLoggedIn and isWebClientLoggedIn
 
+    def getMultipleDisks(self):
+        return set([song['album'] for song in self.allSongs if song.get('discNumber', 0) > 1])
+
     def getDeviceId(self):
         deviceIds = self.webClient.get_registered_devices()
         deviceId = deviceIds[0]['id']
@@ -43,11 +48,16 @@ class GooglePlayMusicAdapter:
         return streamUrl
 
     def getAllSongs(self):
-        if self.allSongs == None:
+        if self.allSongs is None:
             self.allSongs = self.mobileClient.get_all_songs()
+        if self.multipleDisks is None:
+            self.multipleDisks = self.getMultipleDisks()
         return self.allSongs
 
     def generateTrees(self):
+        if self.trees is not None:
+            return self.trees
+
         allSongs = self.getAllSongs()
 
         albums = {}
@@ -56,11 +66,15 @@ class GooglePlayMusicAdapter:
 
         for song in allSongs:
             songAlbum = self.getAlbumForSong(song)
-            songTitle = self.getTitleForSong(song)
+            songTitle = self.addPadding(self.getTitleForSong(song), songs)
             songs[songTitle] = song
             if songAlbum not in albums:
                 albums[songAlbum] = {'__FLAGS__' : ['LOWEST_LEVEL', 'SONGS']}
+            songTitle = self.addPadding(songTitle.strip(), albums[songAlbum])
             albums[songAlbum][songTitle] = song
+
+        # Sort albums tree using an OrderedDict
+        albums = OrderedDict(sorted(albums.items(), key=lambda s: s[0]))
 
         for album in albums:
             albums[album] = OrderedDict(sorted(albums[album].items(), key=lambda s: self.getTrackNumberForSong(s[1])))
@@ -69,16 +83,30 @@ class GooglePlayMusicAdapter:
                 artists[albumArtist] = {}
             artists[albumArtist][album] = (albums[album])
 
-        return {'__FLAGS__' : ['ROOT_LEVEL'],
-                'Artists'   :  artists,
-                'Albums'    :  albums,
-                'Songs'     :  songs }
+        self.trees = {'__FLAGS__': ['ROOT_LEVEL'],
+                      'Artists': artists,
+                      'Albums': albums,
+                      'Songs':  songs}
+        return self.trees
 
+    def addPadding(self, title, pool):
+        while title in pool:
+            title += ' '
+        return title
 
-    def getSongsForTree(self, tree):
-        pass
+    def getSongsForTree(self, tree, songs):
+        treeFlags = tree.get('__FLAGS__', [])
+        lowestLevel = 'LOWEST_LEVEL' in treeFlags
+        songLevel = 'SONGS' in treeFlags
+        # There shouldnt be any more song levels after a song level
+        if songLevel:
+            songs += [song for song in tree.values() if type(song) is not list]
+        elif not lowestLevel:
+            for subTree in tree.items():
+                if subTree[0] != '__FLAGS__':
+                    self.getSongsForTree(subTree[1], songs)
 
-    # Get song information 
+    # Get song information
     def getTitleForSong(self, song):
         return song['title']
 
@@ -97,7 +125,9 @@ class GooglePlayMusicAdapter:
     def getAlbumForSong(self, song):
         if not type(song) is dict:
             return -1
-        return song['album'] if 'album' in song else 'Unknown Album'
+        albumName = song['album'] if 'album' in song and len(song['album']) > 0 else 'Unknown Album'
+        discNumber = '' if albumName not in self.multipleDisks else ' Disc %s' % song['discNumber']
+        return albumName + discNumber
 
     def getTrackNumberForSong(self, song):
         if not type(song) is dict:
@@ -111,14 +141,11 @@ class GooglePlayMusicAdapter:
         songArtist = self.getArtistForSong(song)
         return '%s - %s' % (songArtist, songTitle)
 
-    """DEBUG METHODS """
-    def getRandUrl(self):
-        if self.allSongs == None:
-            self.allSongs = self.mobileClient.get_all_songs()
-        randomSong = random.choice(self.allSongs)
-        streamUrl = self.mobileClient.get_stream_url(randomSong['id'], self.deviceId)
-        return streamUrl, randomSong
-
+    """ 
+        DEBUG METHOD DO NOT USE
+        Recursively dumps the given tree to the terminal
+        This will break the GUIAdapter 
+    """
     def dumpTree(self, tree, level):
         treeFlags = tree.get('__FLAGS__', [])
         lowestLevel = 'LOWEST_LEVEL' in treeFlags
@@ -130,3 +157,12 @@ class GooglePlayMusicAdapter:
             print '%s%s' % (indentation, items[0])
             if not lowestLevel:
                 self.dumpTree(items[1], level + 1)
+
+    """
+        DEBUG METHOD DO NOT USE
+        Returns the stream URL for a random song
+    """
+    def getRandomUrl(self):
+        if self.allSongs is None:
+            self.getAllSongs()
+        return self.getUrlForSong(random.choice(self.allSongs))
